@@ -12,14 +12,14 @@ IPAddress ap_local_IP(192, 168, 1, 1);
 IPAddress ap_gateway(192, 168, 1, 254);
 IPAddress ap_subnet(255, 255, 255, 0);
 
-const int ONLINE_TIME_ADDRESS = 2;
-const int OFFLINE_TIME_ADDRESS = 4;
+const int ONLINE_TIME_ADDRESS = 0;
+const int OFFLINE_TIME_ADDRESS = ONLINE_TIME_ADDRESS + 2;
 
 const int ONE_SECOND_TICKS = 312500;
 //const int ONE_MINUTE_TICKS = ONE_SECOND_TICKS * 60;
 const int ONE_MINUTE_TICKS = ONE_SECOND_TICKS; // Debug
 
-uint8_t online_time = 3; // minutes
+uint8_t online_time = 6; // minutes
 uint8_t offline_time = 3; // minutes
 
 bool state_on = false;
@@ -57,16 +57,16 @@ const char INDEX_HTML[] =
 
 void ICACHE_RAM_ATTR onTimerISR()
 {
-  //TODO: Add code to toggle relay
-  digitalWrite(RELAY_PIN, !(digitalRead(RELAY_PIN)));
   if (state_on)
   {
     state_on = false;
+    digitalWrite(RELAY_PIN, LOW);
     timer1_write(ONE_MINUTE_TICKS * offline_time);
   }
   else
   {
     state_on = true;
+    digitalWrite(RELAY_PIN, HIGH);
     timer1_write(ONE_MINUTE_TICKS * online_time);
   }
 }
@@ -74,9 +74,9 @@ void ICACHE_RAM_ATTR onTimerISR()
 byte safeReadEEPROM(int address, byte defaultValue)
 {
   byte result = EEPROM.read(address);
-  if (255 == result)
+  if (0xff == result)
   {
-    Serial.print("Reading default EEPROM");
+    Serial.print("Reading default since EEPROM is not initialized: ");
     Serial.println(defaultValue);
 
     result = defaultValue;
@@ -84,16 +84,23 @@ byte safeReadEEPROM(int address, byte defaultValue)
   else
   {
     byte inverseCopy = EEPROM.read(address + 1);
-    if (result ^ inverseCopy)
+    if (0xff != (result ^ inverseCopy))
     {
-      Serial.print("Inverse copy broken EEPROM falback to default ");
+      Serial.print("Inverse copy broken. EEPROM fallback to default: ");
       Serial.print(defaultValue);
-      Serial.print(", result ");
+      Serial.print(", result: ");
       Serial.print(result);
-      Serial.print(", inverse ");
+      Serial.print(", inverse: ");
       Serial.println(inverseCopy);
 
       result = defaultValue;
+    }
+    else
+    {
+      Serial.print("Reading actual value from EEPROM:  ");
+      Serial.print(result);
+      Serial.print(", inverse: ");
+      Serial.println(inverseCopy);
     }
   }
   return result;
@@ -102,8 +109,15 @@ byte safeReadEEPROM(int address, byte defaultValue)
 bool safeWriteEEPROM(int address, byte value)
 {
   bool result = true;
+  byte inverseCopy = ~value;
   EEPROM.write(address, value);
-  EEPROM.write(address + 1, ~value);
+  EEPROM.write(address + 1, inverseCopy);
+
+  Serial.print("Writing in EEPROM value:  ");
+  Serial.print(value);
+  Serial.print(", inverse ");
+  Serial.println(inverseCopy);
+
   return result;
 }
 
@@ -112,7 +126,9 @@ void setup()
 {
   Serial.begin(115200);
   EEPROM.begin(512);
+
   pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW);
 
   Serial.println("Reading timeouts from EEPROM...");
   online_time = safeReadEEPROM(ONLINE_TIME_ADDRESS, online_time);
@@ -168,9 +184,18 @@ void handleUpdate()
     {
       online_time = (uint8_t)onlineNumericalValue;
       offline_time = (uint8_t)offlineNumericalValue;
-      //      safeWriteEEPROM(ONLINE_TIME_ADDRESS, online_time);
-      //      safeWriteEEPROM(OFFLINE_TIME_ADDRESS, offline_time);
-      sprintf(page, INDEX_HTML, "New Times Saved", online_time, offline_time);
+
+      safeWriteEEPROM(ONLINE_TIME_ADDRESS, online_time);
+      safeWriteEEPROM(OFFLINE_TIME_ADDRESS, offline_time);
+
+      if (EEPROM.commit())
+      {
+        sprintf(page, INDEX_HTML, "New Times Saved", online_time, offline_time);
+      }
+      else
+      {
+        sprintf(page, INDEX_HTML, "ERROR! EEPROM commit failed", online_time, offline_time);
+      }
     }
   }
   else
