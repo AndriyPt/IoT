@@ -24,8 +24,7 @@ uint8_t offline_time = 3; // minutes
 
 bool state_on = false;
 
-//const int RELAY_PIN = 2;
-const int RELAY_PIN = LED_BUILTIN; // Debug
+const int RELAY_PIN = D1;
 
 const char INDEX_HTML[] =
   "<!DOCTYPE HTML>"
@@ -61,12 +60,14 @@ void ICACHE_RAM_ATTR onTimerISR()
   {
     state_on = false;
     digitalWrite(RELAY_PIN, LOW);
+    digitalWrite(LED_BUILTIN, HIGH);
     timer1_write(ONE_MINUTE_TICKS * offline_time);
   }
   else
   {
     state_on = true;
     digitalWrite(RELAY_PIN, HIGH);
+    digitalWrite(LED_BUILTIN, LOW);
     timer1_write(ONE_MINUTE_TICKS * online_time);
   }
 }
@@ -128,7 +129,9 @@ void setup()
   EEPROM.begin(512);
 
   pinMode(RELAY_PIN, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(RELAY_PIN, LOW);
+  digitalWrite(LED_BUILTIN, HIGH);
 
   Serial.println("Reading timeouts from EEPROM...");
   online_time = safeReadEEPROM(ONLINE_TIME_ADDRESS, online_time);
