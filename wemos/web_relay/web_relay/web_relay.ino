@@ -15,12 +15,12 @@ IPAddress ap_subnet(255, 255, 255, 0);
 const int ONLINE_TIME_ADDRESS = 0;
 const int OFFLINE_TIME_ADDRESS = ONLINE_TIME_ADDRESS + 2;
 
-const int ONE_SECOND_TICKS = 312500;
-//const int ONE_MINUTE_TICKS = ONE_SECOND_TICKS * 60;
-const int ONE_MINUTE_TICKS = ONE_SECOND_TICKS; // Debug
+const uint32_t ONE_SECOND_TICKS = 312500;
 
-uint8_t online_time = 6; // minutes
-uint8_t offline_time = 3; // minutes
+uint8_t online_time = 5; // minutes
+uint8_t offline_time = 2; // minutes
+
+uint16_t seconds_left = 0;
 
 bool state_on = false;
 
@@ -56,20 +56,28 @@ const char INDEX_HTML[] =
 
 void ICACHE_RAM_ATTR onTimerISR()
 {
-  if (state_on)
+  if (seconds_left > 0)
   {
-    state_on = false;
-    digitalWrite(RELAY_PIN, LOW);
-    digitalWrite(LED_BUILTIN, HIGH);
-    timer1_write(ONE_MINUTE_TICKS * offline_time);
+    seconds_left--;
   }
-  else
+  if (0 == seconds_left)
   {
-    state_on = true;
-    digitalWrite(RELAY_PIN, HIGH);
-    digitalWrite(LED_BUILTIN, LOW);
-    timer1_write(ONE_MINUTE_TICKS * online_time);
+    if (state_on)
+    {
+      state_on = false;
+      digitalWrite(RELAY_PIN, LOW);
+      digitalWrite(LED_BUILTIN, HIGH);
+      seconds_left = offline_time * 60;
+    }
+    else
+    {
+      state_on = true;
+      digitalWrite(RELAY_PIN, HIGH);
+      digitalWrite(LED_BUILTIN, LOW);
+      seconds_left = online_time * 60;
+    }
   }
+  timer1_write(ONE_SECOND_TICKS);
 }
 
 byte safeReadEEPROM(int address, byte defaultValue)
@@ -142,7 +150,8 @@ void setup()
   timer1_enable(TIM_DIV256, TIM_EDGE, TIM_SINGLE);
 
   // 2 Seconds warm up for timer
-  timer1_write(ONE_SECOND_TICKS * 2);
+  seconds_left = 2;
+  timer1_write(ONE_SECOND_TICKS);
 
   Serial.println("Configuring Soft-AP...");
   WiFi.softAPConfig(ap_local_IP, ap_gateway, ap_subnet);
